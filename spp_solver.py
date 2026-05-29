@@ -3,9 +3,14 @@ import math
 import heapq
 import time
 class NetworkSolver:
+    """
+    Classe degli algoritmi per la risoluzione dello Shortest Path Problem
+    """
+
     def __init__(self, instance_name, network,):
         self.instance_name = instance_name
         self.network = network
+
     def dijkstra(self, start_id, end_id):
         # 1. INIZIALIZZAZIONE
         perm = set() # Equivalente a S (nodi permanenti), inizializzato vuoto
@@ -75,13 +80,177 @@ class NetworkSolver:
         
         return path_edges, distances[end_id]
     
-    def dial_dijkstra(self):
-        print()
+    def dial_dijkstra(self, start_id, end_id):
+        
+        # 1. CALCOLO DELLA DISTANZA MASSIMA DEGLI EDGE DEL GRAFO
+        max_c = 0
+        for node_id in self.network.nodes:
+            for edge in self.network.adj_list[node_id]:
+                cost = int(edge.len) # intero per l'indice del bucket
+                if cost > max_c:
+                    max_c = cost
+        
+        num_nodes = len(self.network.nodes)
+        max_possible_dist = (num_nodes - 1) * max_c # (n-1)*C al massimo
 
-    def A_star(self):
-        print()
+        # 2. INIZIALIZZAZIONE VARIABILI PRINCIPALI
+        perm = set() # nodi permanenti
+        temp = set(self.network.nodes.keys()) # nodi temporanei
+        
+        distances = {node_id: float('inf') for node_id in self.network.nodes} # dict delle distanze dalla sorgente per ogni nodo
+        distances[start_id] = 0 # nodo sorgente ha distanza nulla
+        
+        predecessors_edge = {node_id: None for node_id in self.network.nodes}
+        
+        # INIZIALIZZAZIONE SET DI BUCKETS (Implementazione di Dial)
+        buckets = [set() for _ in range(max_possible_dist + 1)] # set dei bucket per l'accesso rapido ai nodi
+        buckets[0].add(start_id) # inserisco nodo sorgente nel primo bucket 0 (distanza nulla)
+        
+        current_bucket_idx = 0 # indice di tracciamento del bucket corrente
+        
+        print(f"\n[Dijkstra Dial] Calcolo percorso da {start_id} a {end_id}...")
+
+        # 3. CICLO PRINCIPALE (Finchè la cardinalità del set di nodi permanenti non eguaglia quella del set di nodi del grafo)
+        while len(perm) < len(self.network.nodes):
+            
+            # Itera i buckets dal basso verso l'alto finché non trova il primo non vuoto (distanza minima)
+            while current_bucket_idx <= max_possible_dist and not buckets[current_bucket_idx]:
+                current_bucket_idx += 1
+                
+            # Se la distanza massima viene superata, allora i restanti nodi sono irraggiungibili, quindi esce dal ciclo
+            if current_bucket_idx > max_possible_dist:
+                break
+                
+            # Si estrae un nodo dal bucket minimo corrente
+            u = buckets[current_bucket_idx].pop()
+            
+            # Se il nodo corrisponde alla destinazione, esce dal ciclo
+            if u == end_id:
+                break
+                
+            # Se il nodo pescato è permanente, allora prosegue con la prossima iterazione
+            if u in perm:
+                continue
+                
+            # Si rende il nodo a permanente 
+            temp.remove(u)
+            perm.add(u)
+            
+            # Iterazione per ogni edge uscente al nodo u
+            for edge in self.network.adj_list[u]:
+                v = edge.tail.get_id() # prendo il nodo coda v
+                edge_cost = int(edge.len) # si assicura che il costo sia intero
+                
+                # Se il nodo coda è temporaneo, allora si verifica la sua distanza dalla sorgente passando per u
+                if v in temp:
+                    new_cost = distances[u] + edge_cost
+                    
+                    # Se maggiore, allora si puà aggiornare con la nuova distanza
+                    if distances[v] > new_cost:
+                        old_dist = distances[v]
+                        
+                        # Se il nodo aveva già una distanza finita, si rimuove dal suo vecchio bucket
+                        if old_dist != float('inf'):
+                            buckets[int(old_dist)].remove(v)
+                            
+                        # Si aggiorna la distanza e l'edge predecessore
+                        distances[v] = new_cost
+                        predecessors_edge[v] = edge
+                        
+                        # Inseriamo il nodo nel nuovo bucket
+                        buckets[int(new_cost)].add(v)
+
+        # 4. RICOSTRUZIONE DEL PERCORSO
+        if distances[end_id] == float('inf'): # se la distanza del nodo finale è infinita, non ci sono percorsi
+            return None, float('inf')
+
+        path_edges = [] # lista degli edge del percorso
+        current = end_id
+        
+        # Si ripercorrono gli archi a partire dal nodo destinazione all'indietro per ricomporre il percorso minimo
+        while current != start_id:
+            arco_usato = predecessors_edge[current]
+            path_edges.append(arco_usato)
+            current = arco_usato.head.get_id() # Assumendo head sia il nodo da cui parte l'arco
+            
+        path_edges.reverse() # si inverte l'ordine della lista
+        
+        # Si restituisce il percorso e la distanza finale dal nodo sorgente al nodo destinazione
+        return path_edges, distances[end_id]
+
+    def a_star(self, start_id, end_id):
+        nodes = self.network.nodes
+        end_node = nodes[end_id]
+        
+        # FUNZIONE EURISTICA (DISTANZA EUCLIDEA)
+        def heuristic(node_id):
+            current_node = nodes[node_id]
+            
+            return math.hypot(current_node.x - end_node.x, current_node.y - end_node.y)
+
+        # 1. INIZIALIZZAZIONE
+        distances = {node_id: float('inf') for node_id in self.network.nodes} # dict delle distanza per nodo
+        distances[start_id] = 0
+        
+        predecessors_edge = {node_id: None for node_id in self.network.nodes} # dict dei predecessori per nodo
+        
+        open_set = []
+        
+        start_h = heuristic(start_id)
+        heapq.heappush(open_set, (start_h, start_id)) # utilizzo lista prioritaria per i score = distance(node) + heuristic(node)
+        
+        closed_set = set() # set dei nodi selezionati e rimossi
+
+        print(f"\n[A*] Calcolo percorso da {start_id} a {end_id}...")
+
+        # 2. CICLO PRINCIPALE
+        while open_set:
+            
+            current_f, u = heapq.heappop(open_set) # si prende il nodo con score minimo dalla lista
+            
+            if u == end_id:
+                break
+            if u in closed_set:
+                continue
+                
+            closed_set.add(u)
+            
+            # AGGIORNAMENTO DISTANZA
+            for edge in self.network.adj_list[u]:
+                v = edge.tail.get_id()
+                
+                if v in closed_set:
+                    continue
+                    
+                new_dist = distances[u] + edge.len
+                
+                if new_dist < distances[v]:
+                    predecessors_edge[v] = edge
+                    distances[v] = new_dist
+                    
+                    f_score = new_dist + heuristic(v)
+                    heapq.heappush(open_set, (f_score, v))
+
+        # 3. TRACE BACK DEL PERCORSO
+        if distances[end_id] == float('inf'):
+            return None, float('inf')
+
+        path_edges = []
+        current = end_id
+        
+        while current != start_id:
+            arco_usato = predecessors_edge[current]
+            path_edges.append(arco_usato)
+            current = arco_usato.head.get_id() 
+            
+        path_edges.reverse()
+        
+        return path_edges, distances[end_id]
 
 class Node:
+    """
+    Classe della struttura del nodo
+    """
     def __init__(self, id, x, y,):
         self.id = id
         self.x = x
@@ -97,6 +266,10 @@ class Node:
         return f"Node({self.id, self.get_coordinates})"
 
 class Edge:
+    """
+    Classe della struttura dell'edge
+    """
+
     def __init__(self, edge_id, head, tail, length, name = "UNK"):
         try:
 
@@ -122,6 +295,10 @@ class Edge:
         return f"Edge({self.id, self.name, self.get_edge})"
 
 class Network:
+    """
+    Classe della struttura della rete
+    """
+
     def __init__(self):
         self.nodes = {}
         self.edges = []
@@ -169,16 +346,14 @@ def nearest_node(network, target_x, target_y):
 
     return nearest_node
 
-
-
 if __name__ == '__main__':
 
-    
-
-    G = ox.load_graphml(filepath="cagliari.graphml")
+    G = ox.load_graphml(filepath="cagliari.graphml") # caricamento delle grafo 'cagliari.graphml'
 
     stats = ox.basic_stats(G)
     print(f"Nodi (n): {stats['n']} | Archi (m): {stats['m']}")
+    
+    # CREAZIONE ISTANZA DI RETE
     cagliari_net = Network()
 
     for node_id, data in G.nodes(data=True):
@@ -215,22 +390,16 @@ if __name__ == '__main__':
     print(f"Nodi Rete: {len(cagliari_net.nodes)} | Archi Rete: {len(cagliari_net.edges)}")
     print(f"Max Edge Weight per Dial: {cagliari_net.max_edge_weight}")
     
-    
+    # CREAZIONE ISTANZA DEL NETWORKSOLVER
     solver = NetworkSolver(instance_name="Routing_Cagliari", network=cagliari_net)
 
-
-    
-
-
-
-
+    # Inizializzazione coordinate di Latitudine e Longitudine di nodo sorgente e destinazione
     y_partenza, x_partenza = 39.214241, 9.107818
-    
-
     y_arrivo, x_arrivo = 39.225522, 9.113819
     
     print("\nRicerca dei punti di accesso stradali più vicini...")
     
+    # Corrispondenza delle coordinate ai nodi della rete
     partenza = nearest_node(cagliari_net, target_x=x_partenza, target_y=y_partenza)
     arrivo = nearest_node(cagliari_net, target_x=x_arrivo, target_y=y_arrivo)
     
@@ -241,8 +410,8 @@ if __name__ == '__main__':
     # Avvia il cronometro ad alta precisione
     start_time = time.perf_counter()
     
-    # Esegue l'algoritmo puro
-    percorso, costo = solver.dijkstra(start_id=partenza, end_id=arrivo)
+    # ESECUZIONE DELL'ALGORITMO
+    percorso, costo = solver.a_star(start_id=partenza, end_id=arrivo)
     
     # Ferma il cronometro
     end_time = time.perf_counter()
@@ -252,7 +421,7 @@ if __name__ == '__main__':
     tempo_esecuzione_s = end_time - start_time
     
 
-    print("\n     RISULTATO DIJKSTRA    \n")
+    print("\n     RISULTATO    \n")
     if percorso:
         print(f"Costo Totale: {costo:.2f} metri")
         print(f"Incroci: {len(percorso) + 1}") # +1 per contare i nodi, non gli archi
@@ -265,8 +434,6 @@ if __name__ == '__main__':
                 strade_percorse.append(arco.name)
         
         print("\nITINERARIO STRADALE:")
-        #for i, via in enumerate(strade_percorse, 1):
-        #    print(f"  {i}. {via}")
 
         #  Converti gli oggetti Edge in una lista di ID Nodi
         percorso_nodi = [partenza]
