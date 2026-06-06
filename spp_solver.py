@@ -62,7 +62,8 @@ if __name__ == '__main__':
     solver = NetworkSolver(instance_name="Routing_Cagliari", network=cagliari_net)
 
     y_partenza, x_partenza = 39.235996, 9.107634
-    y_arrivo, x_arrivo = 39.225522, 9.113819
+    y_arrivo, x_arrivo = 39.209405, 9.164277
+
     
     print("\nRicerca dei punti di accesso stradali più vicini...")
     partenza = nearest_node(cagliari_net, target_x=x_partenza, target_y=y_partenza)
