@@ -75,9 +75,9 @@ if __name__ == '__main__':
    # 4. BENCHMARK DEGLI ALGORITMI
     algoritmi = {
         "Dijkstra": solver.dijkstra,
-        "Dial's Algorithm (Lineare)": solver.dial_dijkstra,
-        "Dial's Algorithm (Circolare)": solver.dial_dijkstra_cir,
-        "A* (A-Star)": solver.a_star
+        "A* (A-Star)": solver.a_star,
+        "Dial's Algorithm": solver.dial_dijkstra,
+ 
     }
     
     risultati = {}
@@ -116,13 +116,13 @@ if __name__ == '__main__':
     # 5. STAMPA DELLA TABELLA DI CONFRONTO
     print("\n" + "="*80)
     print(" " * 20 + "RISULTATI BENCHMARK")
-    print("="*80)
+    print("="*0)
     for nome, dati in risultati.items():
         if dati['costo'] != float('inf'):
             print(f"{nome.ljust(30)} | Tempo: {dati['tempo_ms']:>8.2f} ms | Costo: {dati['costo']:.2f} m")
         else:
             print(f"{nome.ljust(30)} | PERCORSO NON TROVATO")
-    print("="*80)
+    print("="*100)
   
 # 6. PLOT DEI GRAFICI PER OGNI ALGORITMO
     print("\nVisualizzazione delle mappe in sequenza...")
