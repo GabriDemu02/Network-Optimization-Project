@@ -2,7 +2,7 @@ import osmnx as ox
 import math
 import time
 import matplotlib.pyplot as plt
-from NetworkSolver import Network, Node, Edge, NetworkSolver
+from NetworkSolver_temp import Network, Node, Edge, NetworkSolver
 
 def nearest_node(network, target_x, target_y):
     """
@@ -61,7 +61,7 @@ if __name__ == '__main__':
     # 3. SETUP DEL SOLVER
     solver = NetworkSolver(instance_name="Routing_Cagliari", network=cagliari_net)
 
-    y_partenza, x_partenza = 39.214241, 9.107818
+    y_partenza, x_partenza = 39.235996, 9.107634
     y_arrivo, x_arrivo = 39.225522, 9.113819
     
     print("\nRicerca dei punti di accesso stradali più vicini...")

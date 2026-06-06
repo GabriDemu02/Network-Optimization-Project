@@ -47,7 +47,9 @@ class NetworkSolver:
     def dijkstra(self, start_id, end_id):
         # 1. INIZIALIZZAZIONE
         perm = set() # Equivalente a S (nodi permanenti), inizializzato vuoto
-        temp = set(self.network.nodes.keys()) # Equivalente a S_bar (nodi temporanei), inizializzato con tutti i nodi
+        
+        # OTTIMIZZAZIONE FRONTIERA: temp inizializzato SOLO col nodo sorgente
+        temp = {start_id} 
         
         # d(i) = +infinito per tutti, tranne d(s) = 0
         distances = {node_id: float('inf') for node_id in self.network.nodes}
@@ -56,11 +58,10 @@ class NetworkSolver:
         # pred(i) = None per tutti
         predecessors_edge = {node_id: None for node_id in self.network.nodes}
         
-        # 2. CICLO PRINCIPALE: Finché |S| < |N|
-        while len(perm) < len(self.network.nodes):
+        # 2. CICLO PRINCIPALE: Finché ci sono nodi nella frontiera da esplorare
+        while temp:
             
-            # SELEZIONE DEL NODO MINIMO IN S_bar (temp) 
-            # Selezionare il nodo i in temp con d(i) = min { d(j) : j in temp }
+            # SELEZIONE DEL NODO MINIMO NELLA FRONTIERA (temp) 
             current_dist = float('inf')
             u = None
             
@@ -69,7 +70,7 @@ class NetworkSolver:
                     current_dist = distances[nodo]
                     u = nodo
                     
-            # Se 'u' è None, tutti i nodi rimasti sono irraggiungibili
+            # Se 'u' è None, la coda è vuota o rotta
             if u is None:
                 break
                 
@@ -77,36 +78,39 @@ class NetworkSolver:
             if u == end_id:
                 break
                 
-            # Il nodo è stato selezionato: lo togliamo dai temporanei e lo mettiamo nei permanenti
+            # Il nodo è stato selezionato: lo togliamo dalla frontiera e lo mettiamo nei permanenti
             temp.remove(u)
             perm.add(u)
             
-            #  RILASSAMENTO 
-            # Per ogni arco (i,j) in A
+            # RILASSAMENTO E AGGIORNAMENTO FRONTIERA
+            # Per ogni arco (i,j) uscente da u
             for edge in self.network.adj_list[u]:
                 v = edge.tail.get_id()
                 
-                # Ottimizzazione logica: aggiorniamo solo i nodi che sono ancora Temporanei
-                if v in temp:
+                # Aggiorniamo solo se il nodo NON è già stato chiuso (non è permanente)
+                if v not in perm:
                     new_cost = distances[u] + edge.weight
                     
                     # se d(j) > d(i) + c_ij
                     if distances[v] > new_cost:
                         distances[v] = new_cost          # d(j) = d(i) + c_ij
-                        predecessors_edge[v] = edge      # pred(j) = i (salviamo l'arco per comodità)
+                        predecessors_edge[v] = edge      # pred(j) = i
+                        
+                        # Aggiungiamo il vicino alla frontiera temporanea
+                        temp.add(v)
 
         # 3. RICOSTRUZIONE DEL PERCORSO
         return self.reconstruct_path(start_id, end_id, distances, predecessors_edge)
 
     def dial_dijkstra_cir(self, start_id, end_id):
         
-        # 1. RECUPERO COSTO MASSIMO (Usiamo la proprietà della rete per fare prima)
+        # 1. RECUPERO COSTO MASSIMO
         max_c = self.network.max_edge_weight
         bucket_size = max_c + 1 
         
-        # 2. INIZIALIZZAZIONE VARIABILI (Stessa base logica di Dijkstra)
+        # 2. INIZIALIZZAZIONE VARIABILI
         perm = set() 
-        temp = set(self.network.nodes.keys()) # Aggiunto per mantenere la logica base di Dijkstra
+        # NOTA: Rimosso 'temp'. In Dial, i bucket stessi fungono nativamente da frontiera.
         
         distances = {node_id: float('inf') for node_id in self.network.nodes}
         distances[start_id] = 0 
@@ -121,7 +125,7 @@ class NetworkSolver:
         nodes_in_buckets = 1 
         
         # 3. CICLO PRINCIPALE
-        while nodes_in_buckets > 0 and len(perm) < len(self.network.nodes):
+        while nodes_in_buckets > 0:
             
             # Gira sull'array circolare finché non trova un bucket pieno
             while not buckets[current_dist % bucket_size]:
@@ -138,22 +142,20 @@ class NetworkSolver:
             if u == end_id:
                 break
                 
+            # Se è già permanente lo ignoriamo
             if u in perm:
                 continue
                 
-            # Il nodo è stato selezionato: lo togliamo dai temporanei e lo mettiamo nei permanenti
-            if u in temp:
-                temp.remove(u)
+            # Lo rendiamo permanente
             perm.add(u)
             
-            # RILASSAMENTO
-            # Esplorazione dei vicini
+            # RILASSAMENTO E AGGIORNAMENTO BUCKET (La nostra frontiera)
             for edge in self.network.adj_list[u]:
-                v = edge.tail.get_id() # Il nodo destinazione dell'arco
+                v = edge.tail.get_id() 
                 edge_cost = edge.weight
                 
-                # Ottimizzazione logica: aggiorniamo solo i nodi che sono ancora Temporanei
-                if v in temp:
+                # Se non è permanente, calcoliamo i costi
+                if v not in perm:
                     new_cost = distances[u] + edge_cost
                     
                     if distances[v] > new_cost:
@@ -171,7 +173,7 @@ class NetworkSolver:
                         buckets[int(new_cost) % bucket_size].add(v)
                         nodes_in_buckets += 1
 
-        # 4. RICOSTRUZIONE DEL PERCORSO (con calcolo basato su .len float)
+        # 4. RICOSTRUZIONE DEL PERCORSO
         return self.reconstruct_path(start_id, end_id, distances, predecessors_edge)
 
     def dial_dijkstra(self, start_id, end_id):
@@ -180,73 +182,67 @@ class NetworkSolver:
         max_c = 0
         for node_id in self.network.nodes:
             for edge in self.network.adj_list[node_id]:
-                cost = edge.weight # intero per l'indice del bucket
+                cost = edge.weight 
                 if cost > max_c:
                     max_c = cost
         
         num_nodes = len(self.network.nodes)
-        max_possible_dist = (num_nodes - 1) * max_c # (n-1)*C al massimo
+        max_possible_dist = (num_nodes - 1) * max_c 
 
-        # 2. INIZIALIZZAZIONE VARIABILI PRINCIPALI (Stessa base logica di Dijkstra)
-        perm = set() # nodi permanenti
-        temp = set(self.network.nodes.keys()) # nodi temporanei
+        # 2. INIZIALIZZAZIONE VARIABILI PRINCIPALI
+        perm = set() 
+        # NOTA: Come per il circolare, rimosso 'temp'. I bucket sono la frontiera.
         
-        distances = {node_id: float('inf') for node_id in self.network.nodes} # dict delle distanze dalla sorgente per ogni nodo
-        distances[start_id] = 0 # nodo sorgente ha distanza nulla
+        distances = {node_id: float('inf') for node_id in self.network.nodes} 
+        distances[start_id] = 0 
         
         predecessors_edge = {node_id: None for node_id in self.network.nodes}
         
-        # INIZIALIZZAZIONE SET DI BUCKETS (Implementazione di Dial)
-        buckets = [set() for _ in range(max_possible_dist + 1)] # set dei bucket per l'accesso rapido ai nodi
-        buckets[0].add(start_id) # inserisco nodo sorgente nel primo bucket 0 (distanza nulla)
+        # INIZIALIZZAZIONE SET DI BUCKETS 
+        buckets = [set() for _ in range(max_possible_dist + 1)] 
+        buckets[0].add(start_id) 
         
-        current_bucket_idx = 0 # indice di tracciamento del bucket corrente
+        current_bucket_idx = 0 
 
-        # 3. CICLO PRINCIPALE (Finchè la cardinalità del set di nodi permanenti non eguaglia quella del set di nodi del grafo)
-        while len(perm) < len(self.network.nodes):
+        # 3. CICLO PRINCIPALE 
+        while current_bucket_idx <= max_possible_dist:
             
-            # Itera i buckets dal basso verso l'alto finché non trova il primo non vuoto (distanza minima)
+            # Itera i buckets dal basso verso l'alto finché non trova il primo non vuoto
             while current_bucket_idx <= max_possible_dist and not buckets[current_bucket_idx]:
                 current_bucket_idx += 1
                 
-            # Se la distanza massima viene superata, allora i restanti nodi sono irraggiungibili, quindi esce dal ciclo
+            # Se la distanza massima viene superata, esce
             if current_bucket_idx > max_possible_dist:
                 break
                 
             # Si estrae un nodo dal bucket minimo corrente
             u = buckets[current_bucket_idx].pop()
             
-            # Se il nodo corrisponde alla destinazione, esce dal ciclo
             if u == end_id:
                 break
                 
-            # Se il nodo pescato è permanente, allora prosegue con la prossima iterazione
             if u in perm:
                 continue
                 
-            # Si rende il nodo permanente e lo si toglie dai temporanei (logica base Dijkstra)
-            temp.remove(u)
+            # Si rende il nodo permanente 
             perm.add(u)
             
-            # RILASSAMENTO
-            # Iterazione per ogni edge uscente al nodo u
+            # RILASSAMENTO E AGGIORNAMENTO BUCKETS
             for edge in self.network.adj_list[u]:
-                v = edge.tail.get_id() # prendo il nodo coda v
-                edge_cost = edge.weight # si assicura che il costo sia intero
+                v = edge.tail.get_id() 
+                edge_cost = edge.weight 
                 
-                # Se il nodo coda è temporaneo, allora si verifica la sua distanza dalla sorgente passando per u
-                if v in temp:
+                # Verifichiamo la distanza solo per i nodi non permanenti
+                if v not in perm:
                     new_cost = distances[u] + edge_cost
                     
-                    # Se maggiore, allora si può aggiornare con la nuova distanza
                     if distances[v] > new_cost:
                         old_dist = distances[v]
                         
-                        # Se il nodo aveva già una distanza finita, si rimuove dal suo vecchio bucket
+                        # Se il nodo aveva già una distanza finita, si rimuove dal vecchio bucket
                         if old_dist != float('inf'):
                             buckets[int(old_dist)].remove(v)
                             
-                        # Si aggiorna la distanza e l'edge predecessore
                         distances[v] = new_cost
                         predecessors_edge[v] = edge
                         
@@ -269,60 +265,56 @@ class NetworkSolver:
                 current_node = nodes[node_id]
                 dx = abs(current_node.x - end_node.x)
                 dy = abs(current_node.y - end_node.y)
-                # Distanza di Chebyshev: Ammissibile e molto veloce
                 return max(dx, dy)
 
-            # 1. INIZIALIZZAZIONE (Stessa base logica di Dijkstra)
-            perm = set() # Equivalente a S (nodi permanenti), inizializzato vuoto
-            temp = set(self.network.nodes.keys()) # Equivalente a S_bar (nodi temporanei), inizializzato con TUTTI i nodi
+            # 1. INIZIALIZZAZIONE
+            perm = set() 
             
-            # g(i) = +infinito per tutti, tranne g(s) = 0
+            # OTTIMIZZAZIONE FRONTIERA: temp parte solo col nodo iniziale
+            temp = {start_id} 
+            
             distances = {node_id: float('inf') for node_id in self.network.nodes}
             distances[start_id] = 0
             
-            # pred(i) = None per tutti
             predecessors_edge = {node_id: None for node_id in self.network.nodes}
             
-            # 2. CICLO PRINCIPALE: Finché |S| < |N|
-            while len(perm) < len(self.network.nodes):
+            # 2. CICLO PRINCIPALE: Finché c'è frontiera da esplorare
+            while temp:
                 
-                # SELEZIONE DEL NODO MINIMO IN S_bar (temp)
-                # Selezionare il nodo i in temp con f(i) = min { g(j) + h(j) : j in temp }
+                # SELEZIONE DEL NODO MINIMO NELLA FRONTIERA (temp)
                 current_f = float('inf')
                 u = None
                 
                 for nodo in temp:
-                    # A* valuta il nodo in base alla somma del costo reale accumulato (g) e dell'euristica (h)
-                    f_score = distances[nodo] + heuristic_chebyshev(nodo)
+                    f_score = distances[nodo] + heuristic(nodo) # O heuristic_chebyshev
                     if f_score < current_f:
                         current_f = f_score
                         u = nodo
                         
-                # Se 'u' è None, tutti i nodi rimasti sono irraggiungibili (grafo non connesso)
                 if u is None:
                     break
                     
-                # Early Exit: ottimizzazione per fermarsi appena la destinazione diventa permanente
                 if u == end_id:
                     break
                     
-                # Il nodo è stato selezionato: lo togliamo dai temporanei e lo mettiamo nei permanenti
+                # Rimuoviamo dalla frontiera e spostiamo nei permanenti
                 temp.remove(u)
                 perm.add(u)
                 
-                # RILASSAMENTO 
-                # Per ogni arco (i,j) in A
+                # RILASSAMENTO E AGGIORNAMENTO FRONTIERA
                 for edge in self.network.adj_list[u]:
                     v = edge.tail.get_id()
                     
-                    # Aggiorniamo solo i nodi che sono ancora Temporanei
-                    if v in temp:
-                        new_cost = distances[u] + edge.weight # g(i) + c_ij
+                    # Ignoriamo i nodi già consolidati nei permanenti
+                    if v not in perm:
+                        new_cost = distances[u] + edge.weight 
                         
-                        # Se g(j) > g(i) + c_ij
                         if distances[v] > new_cost:
-                            distances[v] = new_cost          # Aggiorniamo g(j)
-                            predecessors_edge[v] = edge      # pred(j) = i
+                            distances[v] = new_cost          
+                            predecessors_edge[v] = edge      
+                            
+                            # Aggiungiamo alla frontiera se non c'era già
+                            temp.add(v)
 
             # 3. RICOSTRUZIONE DEL PERCORSO
             return self.reconstruct_path(start_id, end_id, distances, predecessors_edge)
