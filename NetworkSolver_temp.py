@@ -203,7 +203,7 @@ class NetworkSolver:
         buckets[0].add(start_id) 
         
         current_bucket_idx = 0 
-
+        
         # 3. CICLO PRINCIPALE 
         while current_bucket_idx <= max_possible_dist:
             
@@ -251,21 +251,31 @@ class NetworkSolver:
 
         # 4. RICOSTRUZIONE DEL PERCORSO
         return self.reconstruct_path(start_id, end_id, distances, predecessors_edge)
+             
 
-    def a_star(self, start_id, end_id):
+    def heuristic_euclidean(self, node_id, end_id):
+        current_node = self.network.nodes[node_id]
+        end_node = self.network.nodes[end_id]
+        return math.hypot(current_node.x - end_node.x, current_node.y - end_node.y)
+
+    def heuristic_chebyshev(self, node_id, end_id):
+        current_node = self.network.nodes[node_id]
+        end_node = self.network.nodes[end_id]
+        dx = abs(current_node.x - end_node.x)
+        dy = abs(current_node.y - end_node.y)
+        return max(dx, dy)
+
+    def heuristic_manhattan(self, node_id, end_id):
+        current_node = self.network.nodes[node_id]
+        end_node = self.network.nodes[end_id]
+        dx = abs(current_node.x - end_node.x)
+        dy = abs(current_node.y - end_node.y)
+        return dx + dy
+    def a_star(self, start_id, end_id, heuristic_func):
             nodes = self.network.nodes
             end_node = nodes[end_id]
             
-            # FUNZIONE EURISTICA (DISTANZA EUCLIDEA)
-            def heuristic(node_id):
-                current_node = nodes[node_id]
-                return math.hypot(current_node.x - end_node.x, current_node.y - end_node.y)
 
-            def heuristic_chebyshev(node_id):
-                current_node = nodes[node_id]
-                dx = abs(current_node.x - end_node.x)
-                dy = abs(current_node.y - end_node.y)
-                return max(dx, dy)
 
             # 1. INIZIALIZZAZIONE
             perm = set() 
@@ -286,7 +296,7 @@ class NetworkSolver:
                 u = None
                 
                 for nodo in temp:
-                    f_score = distances[nodo] + heuristic(nodo) # O heuristic_chebyshev
+                    f_score = distances[nodo] + heuristic_func(nodo, end_id) 
                     if f_score < current_f:
                         current_f = f_score
                         u = nodo
@@ -314,6 +324,64 @@ class NetworkSolver:
                             predecessors_edge[v] = edge      
                             
                             # Aggiungiamo alla frontiera se non c'era già
+                            temp.add(v)
+
+            # 3. RICOSTRUZIONE DEL PERCORSO
+            return self.reconstruct_path(start_id, end_id, distances, predecessors_edge)
+    def a_star_opt(self, start_id, end_id,heuristic_func):
+            nodes = self.network.nodes
+            end_node = nodes[end_id]
+        
+
+
+            # 1. INIZIALIZZAZIONE
+            perm = set() 
+            temp = {start_id} 
+            
+            distances = {node_id: float('inf') for node_id in self.network.nodes}
+            distances[start_id] = 0
+            
+            # NUOVO: DIZIONARIO PER CACHARE GLI F-SCORE 
+            f_scores = {node_id: float('inf') for node_id in self.network.nodes}
+            f_scores[start_id] = heuristic_func(start_id, end_id) 
+            
+            predecessors_edge = {node_id: None for node_id in self.network.nodes}
+            
+            # 2. CICLO PRINCIPALE
+            while temp:
+                
+                current_f = float('inf')
+                u = None
+                
+                # RICERCA DEL MINIMO 
+                for nodo in temp:
+                    if f_scores[nodo] < current_f:
+                        current_f = f_scores[nodo]
+                        u = nodo
+                        
+                if u is None:
+                    break
+                    
+                if u == end_id:
+                    break
+                    
+                temp.remove(u)
+                perm.add(u)
+                
+                # RILASSAMENTO 
+                for edge in self.network.adj_list[u]:
+                    v = edge.tail.get_id()
+                    
+                    if v not in perm:
+                        new_cost = distances[u] + edge.weight 
+                        
+                        if distances[v] > new_cost:
+                            distances[v] = new_cost          
+                            predecessors_edge[v] = edge      
+                            
+                            # NUOVO: Calcoliamo l'euristica SOLO quando troviamo un percorso migliore
+                            f_scores[v] = new_cost + heuristic_func(v, end_id) 
+                            
                             temp.add(v)
 
             # 3. RICOSTRUZIONE DEL PERCORSO

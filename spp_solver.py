@@ -28,7 +28,13 @@ if __name__ == '__main__':
 
     stats = ox.basic_stats(G)
     print(f"Nodi (n): {stats['n']} | Archi (m): {stats['m']}")
+    # STAMPA DEL GRAFO SENZA PERCORSI
+    print("\nVisualizzazione del grafo completo (senza percorsi)...")
     
+
+    
+    # Mostra il grafico
+    plt.show()
     # 2. CREAZIONE ISTANZA DI RETE
     cagliari_net = Network()
 
@@ -56,30 +62,65 @@ if __name__ == '__main__':
         )
         cagliari_net.add_edge(nuovo_arco)
 
-    print(f"Nodi Rete: {len(cagliari_net.nodes)} | Archi Rete: {len(cagliari_net.edges)}")
+    print("\nVisualizzazione della mappa base (senza percorsi)")
     
+    fig, ax = ox.plot_graph(
+        G,                     
+        node_size=3,
+        node_color='green',           # Nasconde i nodi, esattamente come nei percorsi
+        bgcolor='white',       # Sfondo nero coerente
+        edge_color='black',        # Archi bianchi (il default di OSMnx su sfondo nero)
+        edge_linewidth=0.5,    # Spessore leggero per non impastare la visuale
+        show=False,
+        close=False
+    )
+    
+    # Aggiungiamo il titolo con lo stesso stile (usiamo il bianco perché lo sfondo è nero)
+    ax.set_title("Rete Stradale di Cagliari", fontsize=16, color='black', fontweight='bold', pad=15)
+
+    # Titolo della finestra di sistema
+    fig.canvas.manager.set_window_title("Mappa - Base (Nessun Percorso)")
+
+    plt.show()
+
     # 3. SETUP DEL SOLVER
     solver = NetworkSolver(instance_name="Routing_Cagliari", network=cagliari_net)
+    y_partenza, x_partenza = 39.229680, 9.112611
 
-    y_partenza, x_partenza = 39.235996, 9.107634
-    y_arrivo, x_arrivo = 39.209405, 9.164277
+
+
+    y_arrivo, x_arrivo = 39.214811, 9.109814
+
+
+
+    print("=== COORDINATE INPOSTATE ===")
+    print(f"Partenza : Latitudine (y) = {y_partenza} | Longitudine (x) = {x_partenza}")
+    print(f"Arrivo   : Latitudine (y) = {y_arrivo} | Longitudine (x) = {x_arrivo}")
+ 
+
 
     
-    print("\nRicerca dei punti di accesso stradali più vicini...")
+    print("\nRicerca dei punti di accesso stradali più vicini")
     partenza = nearest_node(cagliari_net, target_x=x_partenza, target_y=y_partenza)
     arrivo = nearest_node(cagliari_net, target_x=x_arrivo, target_y=y_arrivo)
-    
+    print()
     print(f"Nodo di partenza: {partenza}")
     print(f"Nodo di arrivo: {arrivo}")
-    print(f"\nAvvio test comparativo da {partenza} a {arrivo}...")
+  
     
    # 4. BENCHMARK DEGLI ALGORITMI
     algoritmi = {
         "Dijkstra": solver.dijkstra,
-        "A* (A-Star)": solver.a_star,
         "Dial's Algorithm": solver.dial_dijkstra,
- 
+        "A* (Euclidea)": lambda start_id, end_id: solver.a_star(start_id, end_id, solver.heuristic_euclidean),
+        "A* (Manhattan)": lambda start_id, end_id: solver.a_star(start_id, end_id, solver.heuristic_manhattan),
+        "A* (Chebyshev)": lambda start_id, end_id: solver.a_star(start_id, end_id, solver.heuristic_chebyshev),
+        "A* (Euclidea) con caching": lambda start_id, end_id: solver.a_star_opt(start_id, end_id, solver.heuristic_euclidean),
+        "A* (Manhattan) con caching": lambda start_id, end_id: solver.a_star_opt(start_id, end_id, solver.heuristic_manhattan),
+        "A* (Chebyshev) con caching": lambda start_id, end_id: solver.a_star_opt(start_id, end_id, solver.heuristic_chebyshev),
     }
+ 
+
     
     risultati = {}
 
@@ -124,7 +165,7 @@ if __name__ == '__main__':
         else:
             print(f"{nome.ljust(30)} | PERCORSO NON TROVATO")
     print("="*100)
-  
+
 # 6. PLOT DEI GRAFICI PER OGNI ALGORITMO
     print("\nVisualizzazione delle mappe in sequenza...")
     
@@ -135,10 +176,12 @@ if __name__ == '__main__':
             fig, ax = ox.plot_graph_route(
                 G,                     
                 dati['nodi_mappa'],         
-                route_color='red',     
+                route_color='blue',     
                 route_linewidth=4,     
-                node_size=0,           
-                bgcolor='black',
+                node_size=3,
+                node_color='green', 
+                edge_color='black',       
+                bgcolor='white',
                 show=False,
                 close=False
             )
@@ -150,5 +193,6 @@ if __name__ == '__main__':
 
             plt.show()
             
+            break
         else:
             print(f" -> Nessun percorso da mostrare per {nome}.")
